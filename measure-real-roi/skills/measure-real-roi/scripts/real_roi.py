@@ -332,8 +332,15 @@ def cmd_checkin(args: argparse.Namespace) -> None:
         f"The Harness records show about {derived_minutes:g} minutes across "
         f"{len(threads)} thread(s) and {turn_count} turn(s)."
     )
+    progress = QuestionProgress(17)
+    print(
+        "This check-in has up to 17 questions and should take about 5-8 minutes. "
+        "Type 0 for none, or type not sure for unknown. Blank answers are not supported."
+    )
 
-    work_index = work_labels.index(prompt_choice("What kind of work made up most of this time?", work_labels)) + 1
+    work_index = work_labels.index(
+        prompt_choice(progress.label("What kind of work made up most of this time?"), work_labels)
+    ) + 1
     record: dict[str, object] = {
         "schema_version": SCHEMA_VERSION,
         "participant_code": config["participant_code"],
@@ -347,49 +354,47 @@ def cmd_checkin(args: argparse.Namespace) -> None:
         "derived_minutes": derived_minutes,
     }
 
-    matches = prompt_bool("Does that sound like the total time you actually spent this week?", default=True)
-    if matches is True:
-        record["confirmed_minutes"] = derived_minutes
-    else:
-        confirmed = prompt_duration(
-            "About how long did you actually spend?",
-            default=derived_minutes,
-            examples=True,
-        )
-        record["confirmed_minutes"] = derived_minutes if confirmed is None else confirmed
+    record["confirmed_minutes"] = prompt_recorded_duration(
+        progress.label("How long did you actually spend with the Harness this week?"),
+        derived_minutes,
+    )
 
     baseline_labels = [choice[0] for choice in BASELINE_CHOICES]
     baseline_label = prompt_choice(
-        "Thinking about this work overall, without the Harness how would you have handled it?",
+        progress.label("Thinking about this work overall, without the Harness how would you have handled it?"),
         baseline_labels,
-        default=1,
     )
     baseline_method = dict(BASELINE_CHOICES)[baseline_label]
     record["baseline_method"] = baseline_method
     if baseline_method in {"would_not_have_done", "unknown"}:
         record["baseline_minutes"] = None
+        progress.skip(1, "there is no baseline time to estimate")
     else:
         record["baseline_minutes"] = prompt_duration(
-            "About how long would that work have taken?",
+            progress.label("About how long would that work have taken?"),
             examples=True,
         )
 
     record["checking_fixing_minutes"] = prompt_duration(
-        "This week, how long did you spend checking or fixing Harness results somewhere else?",
-        default=0,
+        progress.label("This week, how long did you spend checking or fixing Harness results somewhere else?"),
         examples=True,
     )
-    wrong_output = prompt_bool("Did any output cause a real problem you had to clean up later?")
-    record["wrong_output_mattered"] = wrong_output is True
-    record["cleanup_minutes"] = (
-        prompt_duration("About how long did cleanup take?", default=0, examples=True)
-        if wrong_output is True
-        else 0
+    wrong_output = prompt_bool(
+        progress.label("Did any output cause a real problem you had to clean up later?")
     )
+    record["wrong_output_mattered"] = None if wrong_output == "not sure" else wrong_output is True
+    if wrong_output is True:
+        record["cleanup_minutes"] = prompt_duration(
+            progress.label("About how long did cleanup take?"),
+            examples=True,
+        )
+    else:
+        record["cleanup_minutes"] = 0
+        reason = "cleanup time is unknown" if wrong_output == "not sure" else "no cleanup problem was reported"
+        progress.skip(1, reason)
     confidence_label = prompt_choice(
-        "How solid are these numbers?",
+        progress.label("How solid are these numbers?"),
         ["Solid", "Rough but useful", "A guess"],
-        default=2,
     )
     record["confidence"] = {
         "Solid": "high",
@@ -397,52 +402,61 @@ def cmd_checkin(args: argparse.Namespace) -> None:
         "A guess": "low",
     }[confidence_label]
 
-    print("\nWeekly questions")
-    new_capacity = prompt_bool("Did you get anything new done this week because of the Harness?")
+    new_capacity = prompt_bool(
+        progress.label("Did you get anything new done this week because of the Harness?")
+    )
     new_capacity_description = ""
     new_capacity_used_saved_time = False
-    new_capacity_hours = 0
+    new_capacity_hours: float | None = 0
     if new_capacity is True:
-        new_capacity_description = prompt_text("In one sentence, what was it?")
-        new_capacity_used_saved_time = prompt_bool("Did that work use time the Harness saved you?") is True
+        new_capacity_description = prompt_text(
+            progress.label("In one sentence, what was the new work?")
+        )
+        new_capacity_used_saved_time = prompt_bool(
+            progress.label("Did that work use time the Harness saved you?")
+        ) is True
         new_capacity_duration = prompt_duration(
-            "About how long did that new work take?",
+            progress.label("About how long did that new work take?"),
             examples=True,
         )
-        new_capacity_hours = 0 if new_capacity_duration is None else new_capacity_duration / 60
+        new_capacity_hours = None if new_capacity_duration is None else new_capacity_duration / 60
+    else:
+        progress.skip(3, "no new work was reported")
 
     learning_duration = prompt_duration(
-        "How much time did you spend learning the Harness this week?",
-        default=0,
+        progress.label("How much time did you spend learning the Harness this week?"),
         examples=True,
     )
     coordination_duration = prompt_duration(
-        "How much time did you spend in meetings or messages about the Harness this week?",
-        default=0,
+        progress.label("How much time did you spend in meetings or messages about the Harness this week?"),
         examples=True,
     )
-    model_changed = prompt_bool("Did the model underneath the Harness change this week?")
-    model_change_redo_duration = 0
+    model_changed = prompt_bool(
+        progress.label("Did the model underneath the Harness change this week?")
+    )
+    model_change_redo_duration: float | None = 0
     if model_changed is True:
         model_change_redo_duration = prompt_duration(
-            "How long did you spend redoing or adjusting work because of that change?",
-            default=0,
+            progress.label("How long did you spend redoing or adjusting work because of that change?"),
             examples=True,
         )
+    else:
+        reason = "model-change redo time is unknown" if model_changed == "not sure" else "the model did not change"
+        progress.skip(1, reason)
 
     record.update(
         {
             "new_capacity_description": new_capacity_description,
-            "new_capacity_would_not_have_happened": new_capacity is True,
+            "new_capacity_would_not_have_happened": None if new_capacity == "not sure" else new_capacity is True,
             "new_capacity_used_saved_time": new_capacity_used_saved_time,
             "new_capacity_hours": new_capacity_hours,
-            "learning_hours": 0 if learning_duration is None else learning_duration / 60,
-            "coordination_hours": 0 if coordination_duration is None else coordination_duration / 60,
-            "model_changed": model_changed is True,
+            "learning_hours": None if learning_duration is None else learning_duration / 60,
+            "coordination_hours": None if coordination_duration is None else coordination_duration / 60,
+            "model_changed": None if model_changed == "not sure" else model_changed is True,
         }
     )
     record["model_change_redo_hours"] = (
-        0 if model_change_redo_duration is None else model_change_redo_duration / 60
+        None if model_change_redo_duration is None else model_change_redo_duration / 60
     )
     records = [record]
 
@@ -450,14 +464,20 @@ def cmd_checkin(args: argparse.Namespace) -> None:
     for record in records:
         if record.get("record_type") == "weekly_aggregate":
             print(f"- Work type: {WORK_TYPE_LABELS.get(str(record['work_type']), record['work_type'])}")
-            print(f"- Harness time: {float(record['confirmed_minutes']):g} minutes")
+            confirmed_minutes = record["confirmed_minutes"]
+            print(f"- Harness time: {'not sure' if confirmed_minutes is None else f'{float(confirmed_minutes):g} minutes'}")
             print(f"- Without Harness: {record['baseline_minutes'] if record['baseline_minutes'] is not None else 'not sure'}")
-            print(f"- Checking/fixing: {float(record['checking_fixing_minutes']):g} minutes")
-            print(f"- Cleanup: {float(record['cleanup_minutes']):g} minutes")
+            checking_minutes = record["checking_fixing_minutes"]
+            print(f"- Checking/fixing: {'not sure' if checking_minutes is None else f'{float(checking_minutes):g} minutes'}")
+            cleanup_minutes = record["cleanup_minutes"]
+            print(f"- Cleanup: {'not sure' if cleanup_minutes is None else f'{float(cleanup_minutes):g} minutes'}")
             print(f"- New work: {record['new_capacity_description'] or 'none reported'}")
-            print(f"- Learning: {float(record['learning_hours']):g} hours")
-            print(f"- Meetings/messages: {float(record['coordination_hours']):g} hours")
-            print(f"- Model-change redo: {float(record['model_change_redo_hours']):g} hours")
+            learning_hours = record["learning_hours"]
+            print(f"- Learning: {'not sure' if learning_hours is None else f'{float(learning_hours):g} hours'}")
+            coordination_hours = record["coordination_hours"]
+            print(f"- Meetings/messages: {'not sure' if coordination_hours is None else f'{float(coordination_hours):g} hours'}")
+            redo_hours = record["model_change_redo_hours"]
+            print(f"- Model-change redo: {'not sure' if redo_hours is None else f'{float(redo_hours):g} hours'}")
             print(f"- Estimate quality: {record['confidence']}")
         else:
             print(f"- {record['date']}: {WORK_TYPE_LABELS.get(str(record['work_type']), record['work_type'])}")
@@ -467,7 +487,7 @@ def cmd_checkin(args: argparse.Namespace) -> None:
             print(f"  Cleanup: {float(record['cleanup_minutes']):g} minutes")
             print(f"  Estimate quality: {record['confidence']}")
 
-    if not prompt_bool("Save these answers?", default=True):
+    if prompt_bool(progress.label("Save these answers?")) is not True:
         print("Record not saved.")
         return
     confirmed_at = datetime.now().astimezone().isoformat()
