@@ -14,11 +14,11 @@ from pathlib import Path
 from extract_thread_metadata import (
     collect_intervals,
     derive_thread_metadata,
-    load_thread_secret,
+    load_hmac_key,
 )
 
 
-SCHEMA_VERSION = "1.1"
+SCHEMA_VERSION = "1.2"
 PROHIBITED_FIELDS = {
     "name",
     "email",
@@ -127,29 +127,12 @@ def prompt_duration(label: str, examples: bool = False) -> float | None:
         if not value:
             print("Blank input is not supported. Type a duration, 0, or not sure.")
             continue
+        if value.lower() in {"dk", "idk", "i don't know", "unknown", "not sure", "?"}:
+            return None
         duration = parse_duration(value)
         if duration is not None:
             return duration
         print("Enter a time such as 45, 45m, 1h 20m, or 1:30. You can also type 0 or not sure.")
-
-
-def prompt_number(label: str, allow_blank: bool = True) -> float | None:
-    while True:
-        value = input(f"{label}: ").strip().lower()
-        if not value:
-            if allow_blank:
-                return None
-            continue
-        if value in {"dk", "i don't know", "idk", "unknown"}:
-            return None
-        try:
-            number = float(value)
-            if number < 0:
-                print("Enter a non-negative number, or leave blank for unknown.")
-                continue
-            return number
-        except ValueError:
-            print("Enter a number, or leave blank for unknown.")
 
 
 def prompt_choice(label: str, choices: list[str]) -> str:
@@ -249,19 +232,19 @@ def cmd_extract(args: argparse.Namespace) -> None:
         start_date = date.fromisoformat(args.start_date)
         end_date = date.fromisoformat(args.end_date)
     parser_args = argparse.Namespace(
-        secret=args.secret,
-        secret_file=args.secret_file,
+        hmac_key=args.secret,
+        hmac_key_file=args.secret_file,
         keychain_service=args.keychain_service,
         keychain_account=args.keychain_account,
     )
-    secret = load_thread_secret(parser_args)
+    hmac_key = load_hmac_key(parser_args)
     sessions, intervals = collect_intervals(
         Path(args.sessions_dir).expanduser(),
         start_date.isoformat(),
         end_date.isoformat(),
         str(config["timezone"]),
         int(config["gap_cutoff_minutes"]),
-        secret,
+        hmac_key,
     )
     metadata = derive_thread_metadata(
         sessions,
@@ -389,7 +372,7 @@ def cmd_checkin(args: argparse.Namespace) -> None:
             examples=True,
         )
     else:
-        record["cleanup_minutes"] = 0
+        record["cleanup_minutes"] = None if wrong_output == "not sure" else 0
         reason = "cleanup time is unknown" if wrong_output == "not sure" else "no cleanup problem was reported"
         progress.skip(1, reason)
     confidence_label = prompt_choice(
@@ -406,7 +389,7 @@ def cmd_checkin(args: argparse.Namespace) -> None:
         progress.label("Did you get anything new done this week because of the Harness?")
     )
     new_capacity_description = ""
-    new_capacity_used_saved_time = False
+    new_capacity_used_saved_time: bool | None = False
     new_capacity_hours: float | None = 0
     if new_capacity is True:
         new_capacity_description = prompt_text(
@@ -421,6 +404,8 @@ def cmd_checkin(args: argparse.Namespace) -> None:
         )
         new_capacity_hours = None if new_capacity_duration is None else new_capacity_duration / 60
     else:
+        new_capacity_used_saved_time = None if new_capacity == "not sure" else False
+        new_capacity_hours = None if new_capacity == "not sure" else 0
         progress.skip(3, "no new work was reported")
 
     learning_duration = prompt_duration(
@@ -441,6 +426,7 @@ def cmd_checkin(args: argparse.Namespace) -> None:
             examples=True,
         )
     else:
+        model_change_redo_duration = None if model_changed == "not sure" else 0
         reason = "model-change redo time is unknown" if model_changed == "not sure" else "the model did not change"
         progress.skip(1, reason)
 
@@ -520,6 +506,8 @@ def cmd_submission(args: argparse.Namespace) -> None:
         "Enter these confirmed values in the Google Form. Do not add your name or email.",
         "",
     ]
+    if config.get("form_url"):
+        lines.extend([f"Google Form: {config['form_url']}", ""])
     for record in records:
         record_type = record.get("record_type", "thread")
         heading = "Weekly aggregate" if record_type == "weekly_aggregate" else str(record_type)

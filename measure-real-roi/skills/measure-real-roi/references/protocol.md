@@ -33,16 +33,20 @@ The `select` command remains available for a legacy detailed check-in, but the n
 
 ## Weekly Check-In
 
+If the local `checkin` command is unavailable after a Community Skills or source-URL installation, run `scripts/enable_real_roi.py` first. It installs the local commands and starts guided setup.
+
 Run `checkin` on this machine. The command automatically extracts the current week, runs the aggregate check-in, and creates the submission summary.
 
 To run a different week, use `roi-checkin <week-number>`.
 
-Run `checkin` and follow the prompts. The interface uses plain language. Press Enter to accept a displayed default; when no default is displayed, a blank answer means "not sure." It accepts durations such as `45`, `45m`, `1h 20m`, or `1:30`.
+Run `checkin` and follow the prompts. The interface uses plain language and says up front that it has up to 17 questions and should take about 5-8 minutes. Every prompt shows `Next: Question X of Y`, and skipped follow-up questions reduce `Y` so the count stays accurate.
+
+Blank input is not supported. Type `0` for none, `not sure` for unknown, or a duration such as `45`, `45m`, `1h 20m`, or `1:30`. To accept the recorded Harness total, type `recorded`.
 
 The participant sees the week, total recorded minutes, thread count, and turn count, then answers once:
 
 1. "What kind of work made up most of this time?" using friendly labels such as "Analysis or metrics" and "Writing or communication."
-2. "Does that sound like the total time you actually spent this week?" Press Enter to accept the recorded total.
+2. "How long did you actually spend with the Harness this week?" Type `recorded` to accept the recorded total.
 3. "Thinking about this work overall, without the Harness how would you have handled it?" Choose the closest plain-language option.
 4. "About how long would that work have taken?"
 5. "This week, how long did you spend checking or fixing Harness results somewhere else?"

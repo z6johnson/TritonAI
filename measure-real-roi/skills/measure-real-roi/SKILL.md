@@ -1,6 +1,6 @@
 ---
 name: measure-real-roi
-description: Run local, pseudonymous Real ROI check-ins for AI tools. Use when the user asks to measure Real ROI, run a weekly AI ROI check-in, extract metadata-only Harness thread activity, prepare a pseudonymous Google Form submission, validate ROI records, or calculate institutional AI ROI.
+description: Set up and run local, pseudonymous Real ROI check-ins for AI tools. Use when the user asks to enable Real ROI, measure Real ROI, run a weekly AI ROI check-in, extract metadata-only Harness thread activity, prepare a pseudonymous Google Form submission, validate ROI records, or calculate institutional AI ROI.
 ---
 
 # Measure Real ROI
@@ -9,13 +9,13 @@ Use this skill to collect local AI-tool usage data, confirm one aggregate weekly
 
 ## Quick Start
 
-0. For first-time deployment from the packaged repository, run `./install.sh`. It installs the skill, adds the local commands, and runs guided setup. To install without setup, use `./install.sh --no-setup`.
+0. If the local `checkin` command is unavailable, run `python3 scripts/enable_real_roi.py`. It installs the local commands, adds them to the shell path, and runs guided setup. To enable commands without setup, add `--commands-only`.
 1. Read `references/governance.md` before setup or any question about consent, privacy, retention, or identity mapping.
 2. Read `references/protocol.md` before running a weekly check-in.
 3. Read `references/calculation.md` before computing or explaining ROI.
 4. Use `scripts/real_roi.py` for local pilot setup, metadata extraction, aggregate check-in, submission, and validation.
 5. Use `scripts/extract_thread_metadata.py` directly when only metadata extraction is needed.
-6. Keep the check-in plain and short: show the recorded total in ordinary language, let Enter accept a displayed default, treat blank answers without a default as "not sure," and accept durations such as `45m`, `1h 20m`, or `1:30`.
+6. Keep the check-in plain and short: state the question count and estimated time up front, show `Question X of Y` before every question, require an explicit answer, use `0` for none and `not sure` for unknown, and accept durations such as `45m`, `1h 20m`, or `1:30`.
 7. After installation, the short command is `checkin` or `roi-checkin`. It runs extraction, one aggregate check-in, and the submission summary for the current week.
 
 ## Hard Rules
