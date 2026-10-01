@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Senate Chair local case management CLI.
+"""Senate Chair local case management commands.
 
 Offline, standard library only. The AI layer produces structured payloads;
 this tool validates them and maintains the case store, board, and briefing
 data. It never makes a network request and never sends anything.
+
+Users never invoke this module directly. The `bin/senate-chair` wrapper
+resolves a suitable Python interpreter and forwards every subcommand.
 """
 
 from __future__ import annotations
@@ -21,10 +24,12 @@ STATUSES = ["Received", "Active", "Pending", "Resolved"]
 PRIORITIES = ["Urgent", "High", "Normal", "Low"]
 CONFIDENCE_LEVELS = ["high", "medium", "low"]
 SOURCE_TYPES = ["email", "file", "pasted"]
-ACCOUNT_TYPES = ["gmail", "outlook", "none"]
+ACCOUNT_TYPES = ["outlook-chair", "outlook-personal", "gmail", "none"]
+ACCOUNT_CHOICES = ACCOUNT_TYPES + ["outlook"]
 ACCOUNT_LABELS = {
+    "outlook-chair": "Outlook — Senate Chair account",
+    "outlook-personal": "Outlook — personal university account",
     "gmail": "Gmail",
-    "outlook": "Outlook",
     "none": "Intake folder and pasted text",
 }
 BUILT_IN_TOPICS = [
@@ -149,8 +154,11 @@ def load_config(root: Path) -> dict:
     topics = list(BUILT_IN_TOPICS)
     last_mail_run = "none"
     last_briefing = "none"
+    last_drive_run = "none"
     linked_account = "not configured"
     account_address = ""
+    document_repository = ""
+    document_repository_id = ""
     section = None
     for raw in text.splitlines():
         line = raw.strip()
@@ -165,16 +173,25 @@ def load_config(root: Path) -> dict:
             last_mail_run = line.split(":", 1)[1].strip()
         elif line.startswith("- Last briefing:"):
             last_briefing = line.split(":", 1)[1].strip()
+        elif line.startswith("- Last drive run:"):
+            last_drive_run = line.split(":", 1)[1].strip()
         elif line.startswith("- Linked account:"):
             linked_account = line.split(":", 1)[1].strip()
         elif line.startswith("- Account address:"):
             account_address = line.split(":", 1)[1].strip()
+        elif line.startswith("- Document repository:"):
+            document_repository = line.split(":", 1)[1].strip()
+        elif line.startswith("- Document repository ID:"):
+            document_repository_id = line.split(":", 1)[1].strip()
     return {
         "topics": topics,
         "last_mail_run": last_mail_run,
         "last_briefing": last_briefing,
+        "last_drive_run": last_drive_run,
         "linked_account": linked_account,
         "account_address": account_address,
+        "document_repository": document_repository,
+        "document_repository_id": document_repository_id,
     }
 
 
@@ -358,7 +375,13 @@ def next_deadline(case: dict) -> dict | None:
     return min(open_deadlines, key=lambda entry: entry["date"])
 
 
-def create_data_root(root: Path, account: str, account_address: str) -> None:
+def create_data_root(
+    root: Path,
+    account: str,
+    account_address: str,
+    document_repository: str = "",
+    document_repository_id: str = "",
+) -> None:
     config = root / "config.md"
     if config.exists():
         fail(f"{config} already exists; refusing to overwrite an initialized data root.")
@@ -376,7 +399,10 @@ def create_data_root(root: Path, account: str, account_address: str) -> None:
                 f"- Data root: {root}",
                 f"- Linked account: {ACCOUNT_LABELS[account]}",
                 f"- Account address: {account_address}",
+                f"- Document repository: {document_repository}",
+                f"- Document repository ID: {document_repository_id}",
                 "- Last mail run: none",
+                "- Last drive run: none",
                 "- Last briefing: none",
                 "",
                 "## Extra topics",
@@ -409,22 +435,50 @@ def cmd_setup(args: argparse.Namespace) -> None:
     account = args.account
     if not account and sys.stdin.isatty():
         print("Linked email account:")
-        print("  1. Gmail")
-        print("  2. Outlook")
-        print("  3. Intake folder and pasted text only")
-        choice = input("Choose 1-3 [3]: ").strip() or "3"
-        account = {"1": "gmail", "2": "outlook", "3": "none"}.get(choice)
+        print("  1. Outlook — Senate Chair account (recommended)")
+        print("  2. Outlook — personal university account")
+        print("  3. Gmail")
+        print("  4. Intake folder and pasted text only")
+        choice = input("Choose 1-4 [1]: ").strip() or "1"
+        account = {
+            "1": "outlook-chair",
+            "2": "outlook-personal",
+            "3": "gmail",
+            "4": "none",
+        }.get(choice)
         if account is None:
-            fail("Choose 1, 2, or 3.")
-    if account not in ACCOUNT_TYPES:
-        fail("Provide --account gmail, outlook, or none.")
+            fail("Choose 1, 2, 3, or 4.")
+    if account not in ACCOUNT_CHOICES:
+        fail(
+            "Provide --account outlook-chair, outlook-personal, gmail, or none."
+        )
+    legacy_account = account == "outlook"
+    if legacy_account:
+        account = "outlook-chair"
 
     account_address = args.account_address
     if account_address is None and account != "none" and sys.stdin.isatty():
         account_address = input("Account address (optional, press Enter to skip): ").strip()
     account_address = (account_address or "").strip() if account != "none" else ""
 
-    create_data_root(root, account, account_address)
+    document_repository = (args.drive_name or "").strip()
+    document_repository_id = (args.drive_id or "").strip()
+    if sys.stdin.isatty() and not document_repository:
+        document_repository = input(
+            "Shared Google Drive repository name (optional, press Enter to skip): "
+        ).strip()
+        if document_repository:
+            document_repository_id = input(
+                "Drive folder ID (optional, press Enter to skip): "
+            ).strip()
+
+    create_data_root(
+        root,
+        account,
+        account_address,
+        document_repository,
+        document_repository_id,
+    )
     if not args.no_remember:
         write_root_pointer(root)
     board_path = generate_board(root)
@@ -434,6 +488,9 @@ def cmd_setup(args: argparse.Namespace) -> None:
             "initialized": True,
             "linked_account": ACCOUNT_LABELS[account],
             "account_address": account_address,
+            "legacy_outlook_alias": legacy_account,
+            "document_repository": document_repository,
+            "document_repository_id": document_repository_id,
             "board_path": str(board_path),
             "remembered_root": not args.no_remember,
             "harness_actions": {
@@ -458,12 +515,8 @@ def read_payload(path: str) -> dict:
     return payload
 
 
-def cmd_process(args: argparse.Namespace) -> None:
-    root = resolve_root(args.root)
-    require_root(root)
+def apply_payload(root: Path, payload: dict) -> None:
     config = load_config(root)
-    payload = read_payload(args.payload)
-
     for key in ("source", "received", "summary", "topic", "priority", "deadlines", "case"):
         if key not in payload:
             fail(f"Payload missing required key: {key}")
@@ -607,6 +660,71 @@ def cmd_process(args: argparse.Namespace) -> None:
             "status": case["Status"],
             "review_flag": case["Review flag"],
             "board_path": str(board_path),
+        }
+    )
+
+
+def cmd_process(args: argparse.Namespace) -> None:
+    root = resolve_root(args.root)
+    require_root(root)
+    payload = read_payload(args.payload)
+    apply_payload(root, payload)
+
+
+def parse_deadline_flag(value: str) -> dict:
+    if "|" not in value:
+        fail("Each --deadline must be formatted 'YYYY-MM-DD|verbatim source sentence'.")
+    raw_date, source = value.split("|", 1)
+    deadline_date = parse_iso_date(raw_date, "deadline date")
+    deadline_source = source.strip()
+    if not deadline_source:
+        fail("A deadline source sentence must not be empty.")
+    return {"date": deadline_date.isoformat(), "source": deadline_source}
+
+
+def cmd_new_item(args: argparse.Namespace) -> None:
+    root = resolve_root(args.root)
+    require_root(root)
+    source_ref = (args.ref or "").strip()
+    if args.source_type != "pasted" and not source_ref:
+        fail("--ref is required for email and file items")
+    if args.source_type == "pasted":
+        source_ref = ""
+    deadlines = [parse_deadline_flag(entry) for entry in (args.deadline or [])]
+    payload = {
+        "source": {"type": args.source_type, "ref": source_ref},
+        "received": args.received or date.today().isoformat(),
+        "summary": args.summary,
+        "topic": args.topic,
+        "priority": args.priority,
+        "deadlines": deadlines,
+        "case": {
+            "action": args.case_action,
+            "id": args.case_id or "",
+            "title": args.case_title or "",
+            "confidence": args.confidence,
+            "reason": args.reason,
+            "suggested_owner": args.suggested_owner or "",
+            "suggested_next_action": args.suggested_next_action or "",
+        },
+        "confidential": args.confidential,
+    }
+    apply_payload(root, payload)
+
+
+def cmd_link_drive(args: argparse.Namespace) -> None:
+    root = resolve_root(args.root)
+    require_root(root)
+    name = (args.name or "").strip()
+    if not name:
+        fail("Provide --name for the shared Google Drive repository.")
+    update_config(root, "Document repository", name)
+    update_config(root, "Document repository ID", (args.drive_id or "").strip())
+    emit(
+        {
+            "root": str(root),
+            "document_repository": name,
+            "document_repository_id": (args.drive_id or "").strip(),
         }
     )
 
@@ -763,11 +881,12 @@ def generate_board(root: Path) -> Path:
     board_dir = root / "board"
     secure_directory(board_dir)
     assets_dir = Path(__file__).resolve().parent.parent / "assets"
-    for filename in ("dashboard.css", "dashboard-app.js"):
-        source = assets_dir / filename
+    asset_targets = {"dashboard.css": "dashboard.css", "dashboard-app.js": "app.js"}
+    for source_name, target_name in asset_targets.items():
+        source = assets_dir / source_name
         if not source.is_file():
             fail(f"Dashboard asset missing: {source}")
-        secure_write_text(board_dir / filename, source.read_text(encoding="utf-8"))
+        secure_write_text(board_dir / target_name, source.read_text(encoding="utf-8"))
     template_path = assets_dir / "dashboard-template.html"
     if not template_path.is_file():
         fail(f"Dashboard asset missing: {template_path}")
@@ -904,11 +1023,18 @@ def cmd_list(args: argparse.Namespace) -> None:
 def cmd_mark(args: argparse.Namespace) -> None:
     root = resolve_root(args.root)
     require_root(root)
-    if not args.mail_run:
-        fail("Provide --mail-run YYYY-MM-DD.")
-    mail_run = parse_iso_date(args.mail_run, "mail run date")
-    update_config(root, "Last mail run", mail_run.isoformat())
-    emit({"last_mail_run": mail_run.isoformat()})
+    result = {}
+    if args.mail_run:
+        mail_run = parse_iso_date(args.mail_run, "mail run date")
+        update_config(root, "Last mail run", mail_run.isoformat())
+        result["last_mail_run"] = mail_run.isoformat()
+    if args.drive_run:
+        drive_run = parse_iso_date(args.drive_run, "drive run date")
+        update_config(root, "Last drive run", drive_run.isoformat())
+        result["last_drive_run"] = drive_run.isoformat()
+    if not result:
+        fail("Provide --mail-run or --drive-run YYYY-MM-DD.")
+    emit(result)
 
 
 def cmd_serve(args: argparse.Namespace) -> None:
@@ -929,10 +1055,138 @@ def cmd_status(args: argparse.Namespace) -> None:
             "root": str(root),
             "linked_account": config["linked_account"],
             "account_address": config["account_address"],
+            "document_repository": config["document_repository"],
+            "document_repository_id": config["document_repository_id"],
             "last_mail_run": config["last_mail_run"],
+            "last_drive_run": config["last_drive_run"],
             "last_briefing": config["last_briefing"],
             "board_path": str(board_path),
             "board_exists": board_path.is_file(),
+        }
+    )
+
+
+def skill_directory() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def wrapper_path() -> Path:
+    return skill_directory() / "bin" / "senate-chair"
+
+
+def command_install_path() -> Path:
+    return Path.home() / ".local" / "bin" / "senate-chair"
+
+
+def path_contains(directory: Path) -> bool:
+    return str(directory) in os.environ.get("PATH", "").split(os.pathsep)
+
+
+def cmd_doctor(args: argparse.Namespace) -> None:
+    checks = {}
+    next_actions = []
+
+    version = sys.version_info
+    checks["python"] = {
+        "ok": version >= (3, 9),
+        "version": f"{version.major}.{version.minor}.{version.micro}",
+    }
+
+    required_files = [
+        "SKILL.md",
+        "assets/dashboard.css",
+        "assets/dashboard-app.js",
+        "assets/dashboard-template.html",
+        "scripts/senate_chair_server.py",
+    ]
+    missing_files = [
+        relative
+        for relative in required_files
+        if not (skill_directory() / relative).is_file()
+    ]
+    checks["skill_files"] = {"ok": not missing_files, "missing": missing_files}
+    if missing_files:
+        next_actions.append("Reinstall the senate-chair skill; required files are missing.")
+
+    root = resolve_root(args.root)
+    initialized = (root / "config.md").is_file()
+    checks["data_root"] = {"ok": initialized, "root": str(root)}
+    if not initialized:
+        next_actions.append(
+            "Run setup to initialize the data root, link the Senate Chair Outlook "
+            "account, and link the shared Google Drive repository."
+        )
+        emit({"ok": False, "checks": checks, "next_actions": next_actions})
+        return
+
+    require_root(root)
+    config = load_config(root)
+    account_ok = config["linked_account"] != "not configured"
+    checks["linked_account"] = {
+        "ok": account_ok,
+        "label": config["linked_account"],
+        "address": config["account_address"],
+    }
+    if not account_ok:
+        next_actions.append("Link the Senate Chair Outlook account during setup.")
+    elif config["linked_account"] == "Intake folder and pasted text":
+        next_actions.append(
+            "Mail and calendar are disabled; run setup again to link the Senate "
+            "Chair Outlook account when ready."
+        )
+
+    drive_ok = bool(config["document_repository"])
+    checks["document_repository"] = {
+        "ok": drive_ok,
+        "name": config["document_repository"],
+        "id": config["document_repository_id"],
+    }
+    if not drive_ok:
+        next_actions.append(
+            "Link the shared Google Drive document repository with link-drive."
+        )
+
+    board_path = root / "board" / "index.html"
+    checks["board"] = {"ok": board_path.is_file(), "path": str(board_path)}
+
+    installed_command = command_install_path()
+    checks["command"] = {
+        "wrapper": str(wrapper_path()),
+        "installed": installed_command.is_file() or installed_command.is_symlink(),
+        "install_path": str(installed_command),
+    }
+
+    ok = all(
+        (
+            checks["python"]["ok"],
+            checks["skill_files"]["ok"],
+            checks["data_root"]["ok"],
+            account_ok,
+            drive_ok,
+        )
+    )
+    emit({"ok": ok, "checks": checks, "next_actions": next_actions})
+
+
+def cmd_install_command(args: argparse.Namespace) -> None:
+    source = wrapper_path()
+    if not source.is_file():
+        fail(f"Command wrapper missing: {source}")
+    target = command_install_path()
+    target.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+    if target.is_symlink() or target.exists():
+        target.unlink()
+    target.symlink_to(source)
+    emit(
+        {
+            "installed": True,
+            "command": str(target),
+            "on_path": path_contains(target.parent),
+            "note": (
+                "The command is ready."
+                if path_contains(target.parent)
+                else "Add ~/.local/bin to PATH or invoke the wrapper by full path."
+            ),
         }
     )
 
@@ -950,8 +1204,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="initialize the data root, select the account link, and generate the board",
     )
     setup_parser.add_argument("--root")
-    setup_parser.add_argument("--account", choices=ACCOUNT_TYPES)
+    setup_parser.add_argument("--account", choices=ACCOUNT_CHOICES)
     setup_parser.add_argument("--account-address")
+    setup_parser.add_argument("--drive-name", help="shared Google Drive repository name")
+    setup_parser.add_argument("--drive-id", help="shared Google Drive folder ID")
     setup_parser.add_argument(
         "--no-remember",
         action="store_true",
@@ -963,6 +1219,43 @@ def build_parser() -> argparse.ArgumentParser:
     process_parser.add_argument("--root")
     process_parser.add_argument("--payload", required=True)
     process_parser.set_defaults(func=cmd_process)
+
+    new_item_parser = subparsers.add_parser(
+        "new-item",
+        help="process one item without writing a JSON payload file",
+    )
+    new_item_parser.add_argument("--root")
+    new_item_parser.add_argument(
+        "--source-type", required=True, choices=SOURCE_TYPES, dest="source_type"
+    )
+    new_item_parser.add_argument("--ref", help="message ID, subject+date, or file path")
+    new_item_parser.add_argument("--received", help="YYYY-MM-DD (default: today)")
+    new_item_parser.add_argument("--summary", required=True)
+    new_item_parser.add_argument("--topic", required=True)
+    new_item_parser.add_argument("--priority", choices=PRIORITIES, default="Normal")
+    new_item_parser.add_argument(
+        "--deadline",
+        action="append",
+        help="YYYY-MM-DD|verbatim source sentence; repeat for multiple deadlines",
+    )
+    new_item_parser.add_argument("--case-action", required=True, choices=["new", "existing"], dest="case_action")
+    new_item_parser.add_argument("--case-id", help="existing case ID, e.g. SC-2026-001")
+    new_item_parser.add_argument("--case-title", help="one-line title for a new case")
+    new_item_parser.add_argument("--confidence", required=True, choices=CONFIDENCE_LEVELS)
+    new_item_parser.add_argument("--reason", required=True, help="why this case link or new case")
+    new_item_parser.add_argument("--suggested-owner", dest="suggested_owner")
+    new_item_parser.add_argument("--suggested-next-action", dest="suggested_next_action")
+    new_item_parser.add_argument("--confidential", action="store_true")
+    new_item_parser.set_defaults(func=cmd_new_item)
+
+    link_drive_parser = subparsers.add_parser(
+        "link-drive",
+        help="link or update the shared Google Drive document repository",
+    )
+    link_drive_parser.add_argument("--root")
+    link_drive_parser.add_argument("--name", required=True)
+    link_drive_parser.add_argument("--drive-id", dest="drive_id")
+    link_drive_parser.set_defaults(func=cmd_link_drive)
 
     triage_parser = subparsers.add_parser("triage", help="apply Chair-confirmed case decisions")
     triage_parser.add_argument("--root")
@@ -992,6 +1285,7 @@ def build_parser() -> argparse.ArgumentParser:
     mark_parser = subparsers.add_parser("mark", help="record the last processed mail date")
     mark_parser.add_argument("--root")
     mark_parser.add_argument("--mail-run")
+    mark_parser.add_argument("--drive-run", dest="drive_run")
     mark_parser.set_defaults(func=cmd_mark)
 
     serve_parser = subparsers.add_parser("serve", help="serve the interactive local board")
@@ -1003,6 +1297,17 @@ def build_parser() -> argparse.ArgumentParser:
     status_parser = subparsers.add_parser("status", help="show the configured data root and account")
     status_parser.add_argument("--root")
     status_parser.set_defaults(func=cmd_status)
+
+    doctor_parser = subparsers.add_parser(
+        "doctor", help="verify dependencies, setup, and links"
+    )
+    doctor_parser.add_argument("--root")
+    doctor_parser.set_defaults(func=cmd_doctor)
+
+    install_command_parser = subparsers.add_parser(
+        "install-command", help="install the senate-chair command into ~/.local/bin"
+    )
+    install_command_parser.set_defaults(func=cmd_install_command)
 
     return parser
 

@@ -50,12 +50,19 @@ The script owns these formats. Read them to understand the store; do not edit ca
 
 ## Commands
 
-- `init --root <path>`: create the data root, folders, and `config.md`.
-- `process --root <root> --payload <json>`: persist one processed item; create or update its case; regenerate the board.
+All commands run through `bin/senate-chair` (or `senate-chair` after
+`install-command`). Users never invoke Python directly.
+
+- `doctor [--root <path>]`: verify dependencies, skill files, root, account, and Drive links.
+- `setup --root <path> --account <outlook-chair|outlook-personal|gmail|none> [--account-address <address>] [--drive-name <name>] [--drive-id <id>]`: initialize the data root, record links, and generate the board.
+- `new-item --root <root> ...`: persist one processed item in a single command; see `workflow.md`.
+- `process --root <root> --payload <json>`: legacy JSON-payload alternative to `new-item`.
+- `link-drive --root <root> --name <name> [--drive-id <id>]`: link or update the shared Google Drive repository.
 - `triage --root <root> --case <id> [--status <s>] [--owner <o>] [--next-action <text>] [--pending-unit <unit>] [--clear-review]`: apply Chair-confirmed decisions; regenerate the board.
 - `board --root <root>`: regenerate `board/index.html`.
 - `brief --root <root> [--date YYYY-MM-DD]`: print the briefing JSON skeleton and update the last-briefing marker.
 - `list --root <root> [--status <s>] [--topic <t>]`: list cases.
-- `mark --root <root> --mail-run YYYY-MM-DD`: record the last processed mail date.
+- `mark --root <root> [--mail-run YYYY-MM-DD] [--drive-run YYYY-MM-DD]`: record the last processed mail and Drive dates.
 - `serve --root <root> --host 127.0.0.1 --port 8765`: serve the interactive board locally; non-loopback hosts are rejected.
-- `status --root <root>`: show the configured root, account label, timestamps, and board path.
+- `status --root <root>`: show the configured root, account, Drive repository, timestamps, and board path.
+- `install-command`: install `senate-chair` into `~/.local/bin`.

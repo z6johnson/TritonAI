@@ -111,6 +111,10 @@
   color: #b91c1c;
 }
 
+.board-message.warning {
+  color: #8a6d3b;
+}
+
 .board-message.success {
   color: #3c763d;
 }

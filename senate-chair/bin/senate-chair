@@ -1,0 +1,41 @@
+#!/bin/sh
+# Senate Chair command wrapper: resolves Python 3 and forwards subcommands.
+
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+MODULE="$SCRIPT_DIR/../scripts/senate_chair.py"
+
+python_ok() {
+  command -v "$1" >/dev/null 2>&1 || return 1
+  "$1" - <<'PY' >/dev/null 2>&1
+import sys
+sys.exit(0 if sys.version_info >= (3, 9) else 1)
+PY
+}
+
+if [ -n "${SENATE_CHAIR_PYTHON:-}" ]; then
+  if python_ok "$SENATE_CHAIR_PYTHON"; then
+    exec "$SENATE_CHAIR_PYTHON" "$MODULE" "$@"
+  fi
+  echo "SENATE_CHAIR_PYTHON is set but is not a usable Python 3.9+ interpreter." >&2
+  exit 1
+fi
+
+for candidate in python3 python; do
+  if python_ok "$candidate"; then
+    exec "$candidate" "$MODULE" "$@"
+  fi
+done
+
+cat >&2 <<'MESSAGE'
+Python 3.9 or newer is required, but no suitable interpreter was found.
+
+The assistant can install it automatically:
+  uv python install 3.12
+or
+  brew install python@3.12
+
+After installing, run this command again.
+MESSAGE
+exit 1

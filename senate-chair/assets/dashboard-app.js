@@ -44,6 +44,14 @@ async function loadBoard() {
     renderBoard();
     setMessage("");
   } catch (error) {
+    if (error instanceof TypeError) {
+      setMessage(
+        "Read-only view: interactive editing needs the local board server. " +
+          "Ask your assistant to run senate-chair serve, then open http://127.0.0.1:8765.",
+        "warning"
+      );
+      return;
+    }
     setMessage(error.message, "danger");
   }
 }
