@@ -56,7 +56,7 @@ Rules: `source.type` is `email`, `file`, or `pasted` (a `ref` is required for em
 
 ## Board and briefing
 
-- The board regenerates after every `process`, `triage`, and interactive board edit. To rebuild manually, run `board --root <root>`.
+- The board regenerates after every `process` and `triage`. To rebuild manually, run `board --root <root>`.
 - When creating or updating the board, use the `ucsd-branding` skill to apply the current UCSD Decorator 5 shell.
 - The interactive board supports inline case edits and drag-and-drop stage changes. Start it locally with `serve --root <root> --host 127.0.0.1 --port 8765`.
 - Briefing data comes from `brief --root <root>`: deadlines within 7 days (including overdue), Pending cases by days waiting, Active cases untouched for 5+ days, and items received since the last briefing. Synthesize it into 200 words or fewer with two or three suggested first actions.

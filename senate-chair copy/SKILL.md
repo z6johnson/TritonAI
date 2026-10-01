@@ -38,7 +38,7 @@ The remembered root is `~/.senate-chair/root`. Commands accept `--root` or `SENA
 - Store only the account label and optional display address during setup; never store credentials or OAuth tokens.
 - Never send email or invitations. Unsent drafts and Chair-confirmed calendar changes only.
 - All case data stays under the Chair's data root. Never upload Chair content to any external service.
-- Keep the board local. Serve it only on `127.0.0.1`; never expose it on a network interface. The data root uses owner-only directory and file permissions.
+- Keep the board local. Serve it only on `127.0.0.1`; never expose it on a network interface.
 - Do not fabricate deadlines, owners, or case links. Every extracted deadline cites its verbatim source sentence.
 - Flag medium- and low-confidence case links for review instead of blocking intake.
 - Only `references/answer-bank.md` is authoritative for Senate answers. Do not invent policy, timelines, or procedures. An empty or incomplete bank means "no match," not permission to improvise.

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import sys
-import threading
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -18,25 +17,17 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from senate_chair import (  # noqa: E402
     STATUSES,
-    CASE_ID_RE,
     find_case,
-    generate_board,
     load_all_cases,
     load_config,
-    next_deadline,
     write_case_file,
 )
 
-MAX_REQUEST_BYTES = 1024 * 1024
-
 
 class BoardServer(ThreadingHTTPServer):
-    daemon_threads = True
-
     def __init__(self, address: tuple[str, int], handler: type[BaseHTTPRequestHandler], root: Path):
         super().__init__(address, handler)
         self.root = root
-        self.update_lock = threading.Lock()
 
 
 class BoardRequestHandler(BaseHTTPRequestHandler):
@@ -45,23 +36,11 @@ class BoardRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         return
 
-    def _send_security_headers(self) -> None:
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header(
-            "Content-Security-Policy",
-            "default-src 'self'; style-src 'self' https://cdn.ucsd.edu; "
-            "script-src 'self' https://cdn.ucsd.edu; img-src 'self' https: data:; "
-            "font-src 'self' https://cdn.ucsd.edu https://fonts.gstatic.com; "
-            "connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
-        )
-
     def _send_json(self, status: int, payload: object) -> None:
         body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self._send_security_headers()
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -74,31 +53,22 @@ class BoardRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
-        self._send_security_headers()
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
     def _read_json_body(self) -> dict:
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError as error:
-            raise ValueError("Invalid Content-Length") from error
+        length = int(self.headers.get("Content-Length", "0"))
         if length <= 0:
             raise ValueError("Request body is empty")
-        if length > MAX_REQUEST_BYTES:
-            raise ValueError("Request body is too large")
         raw = self.rfile.read(length)
-        try:
-            value = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError("Request body is not valid UTF-8 JSON") from error
+        value = json.loads(raw.decode("utf-8"))
         if not isinstance(value, dict):
             raise ValueError("JSON body must be an object")
         return value
 
     def _case_payload(self, case: dict) -> dict:
-        deadline = next_deadline(case)
+        deadline = case["deadlines"][0] if case["deadlines"] else None
         return {
             "id": case["id"],
             "title": case["title"],
@@ -115,9 +85,8 @@ class BoardRequestHandler(BaseHTTPRequestHandler):
         }
 
     def _bootstrap(self) -> dict:
-        with self.server.update_lock:
-            cases = load_all_cases(self.server.root)
-            config = load_config(self.server.root)
+        cases = load_all_cases(self.server.root)
+        config = load_config(self.server.root)
         return {
             "cases": [self._case_payload(case) for case in cases],
             "statuses": STATUSES,
@@ -137,8 +106,6 @@ class BoardRequestHandler(BaseHTTPRequestHandler):
             title = str(changes["title"]).strip()
             if not title:
                 raise ValueError("Title cannot be empty")
-            if len(title) > 120:
-                raise ValueError("Title must be 120 characters or fewer")
             if case["title"] != title:
                 case["title"] = title
                 changed.append("title")
@@ -164,31 +131,22 @@ class BoardRequestHandler(BaseHTTPRequestHandler):
                 case["Next action"] = next_action
                 changed.append("next action")
 
-        status_provided = "status" in changes
-        if status_provided:
+        if "status" in changes:
             status = str(changes["status"]).strip()
             if status not in STATUSES:
                 raise ValueError(f"Unsupported status: {status}")
-        else:
-            status = case.get("Status", "Received")
-
-        pending_unit = case.get("Pending unit", "")
-        if status == "Pending":
-            pending_unit = str(changes.get("pending_unit", pending_unit)).strip()
-            if not pending_unit:
-                raise ValueError("Pending cases require a pending unit")
-
-        if status_provided and case.get("Status", "") != status:
-            case["Status"] = status
-            changed.append("status")
-        if status == "Pending" and case.get("Pending unit", "") != pending_unit:
-            case["Pending unit"] = pending_unit
-            if not case.get("Pending since"):
-                case["Pending since"] = date.today().isoformat()
-            changed.append("pending unit")
-        if status != "Pending" and case.get("Pending unit", ""):
-            case["Pending unit"] = ""
-            case["Pending since"] = ""
+            if case.get("Status", "") != status:
+                if status == "Pending":
+                    pending_unit = str(changes.get("pending_unit", case.get("Pending unit", ""))).strip()
+                    if not pending_unit:
+                        raise ValueError("Pending cases require a pending unit")
+                    case["Pending unit"] = pending_unit
+                    case["Pending since"] = date.today().isoformat()
+                else:
+                    case["Pending unit"] = ""
+                    case["Pending since"] = ""
+                case["Status"] = status
+                changed.append("status")
 
         if changes.get("clear_review") is True and case.get("Review flag"):
             case["Review flag"] = ""
@@ -201,13 +159,9 @@ class BoardRequestHandler(BaseHTTPRequestHandler):
         case["Last update"] = today
         case["log"].append(f"{today}: Updated via interactive board ({', '.join(changed)})")
         write_case_file(self.server.root, case)
-        generate_board(self.server.root)
         return self._case_payload(case)
 
     def do_GET(self) -> None:
-        if not self._request_is_authorized():
-            self._send_json(403, {"error": "Forbidden"})
-            return
         path = urlparse(self.path).path
         board_dir = self.server.root / "board"
         if path in ("/", "/index.html"):
@@ -222,47 +176,23 @@ class BoardRequestHandler(BaseHTTPRequestHandler):
             self.send_error(404, "Not found")
 
     def do_PATCH(self) -> None:
-        if not self._request_is_authorized():
-            self._send_json(403, {"error": "Forbidden"})
-            return
         parsed = urlparse(self.path)
         path = parsed.path
         if not path.startswith("/api/cases/"):
             self._send_json(404, {"error": "Not found"})
             return
         case_id = path[len("/api/cases/") :]
-        if not CASE_ID_RE.fullmatch(case_id):
-            self._send_json(400, {"error": f"Invalid case ID: {case_id!r} (expected SC-YYYY-NNN)"})
-            return
         try:
             changes = self._read_json_body()
-            with self.server.update_lock:
-                case = self._update_case(case_id, changes)
+            case = self._update_case(case_id, changes)
             self._send_json(200, case)
-        except (ValueError, KeyError, SystemExit) as error:
+        except (ValueError, KeyError, json.JSONDecodeError) as error:
             self._send_json(400, {"error": str(error)})
         except FileNotFoundError as error:
             self._send_json(404, {"error": str(error)})
 
-    def _request_is_authorized(self) -> bool:
-        port = self.server.server_address[1]
-        allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
-        if self.headers.get("Host", "").lower() not in allowed_hosts:
-            return False
-        origin = self.headers.get("Origin")
-        if origin is None:
-            return True
-        parsed = urlparse(origin)
-        return (
-            parsed.scheme == "http"
-            and parsed.hostname in ("127.0.0.1", "localhost")
-            and parsed.port == port
-        )
-
 
 def serve(root: Path, host: str = "127.0.0.1", port: int = 8765) -> None:
-    if host != "127.0.0.1":
-        raise RuntimeError("The interactive board may only bind to 127.0.0.1")
     require_root = root / "config.md"
     if not require_root.is_file():
         raise RuntimeError(f"Data root is not initialized: {require_root} is missing")

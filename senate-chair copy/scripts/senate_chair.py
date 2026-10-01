@@ -58,32 +58,6 @@ META_KEYS = [
 CASE_HEADING_RE = re.compile(r"^(SC-\d{4}-\d{3}):\s*(.*)$")
 ITEM_ENTRY_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-(\d{3}):\s*(.*)$")
 DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-CASE_ID_RE = re.compile(r"^SC-\d{4}-\d{3}$")
-
-
-def secure_directory(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-    path.chmod(0o700)
-
-
-def secure_write_text(path: Path, text: str) -> None:
-    secure_directory(path.parent)
-    path.write_text(text, encoding="utf-8")
-    path.chmod(0o600)
-
-
-def secure_data_root(root: Path) -> None:
-    secure_directory(root)
-    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        parent = Path(dirpath)
-        for dirname in dirnames:
-            directory = parent / dirname
-            if not directory.is_symlink():
-                directory.chmod(0o700)
-        for filename in filenames:
-            file_path = parent / filename
-            if not file_path.is_symlink() and file_path.is_file():
-                file_path.chmod(0o600)
 
 
 def root_pointer_path() -> Path:
@@ -101,7 +75,6 @@ def read_root_pointer() -> Path | None:
 def write_root_pointer(root: Path) -> None:
     pointer = root_pointer_path()
     pointer.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    pointer.parent.chmod(0o700)
     pointer.write_text(f"{root}\n", encoding="utf-8")
     pointer.chmod(0o600)
 
@@ -141,7 +114,6 @@ def require_root(root: Path) -> None:
     config = root / "config.md"
     if not config.is_file():
         fail(f"Data root is not initialized: {config} is missing. Run the init command first.")
-    secure_data_root(root)
 
 
 def load_config(root: Path) -> dict:
@@ -193,7 +165,7 @@ def update_config(root: Path, key: str, value: str) -> None:
     if not found:
         output.append("")
         output.append(f"- {key}: {value}")
-    secure_write_text(path, "\n".join(output) + "\n")
+    path.write_text("\n".join(output) + "\n", encoding="utf-8")
 
 
 def escape_cell(text: str) -> str:
@@ -256,8 +228,7 @@ def parse_case_file(path: Path) -> dict | None:
 
 def write_case_file(root: Path, case: dict) -> Path:
     case_dir = root / "cases" / case["id"]
-    secure_directory(case_dir)
-    secure_directory(case_dir / "items")
+    (case_dir / "items").mkdir(parents=True, exist_ok=True)
     path = case_dir / "case.md"
     lines = [f"# {case['id']}: {case['title']}", ""]
     for key in META_KEYS:
@@ -289,7 +260,7 @@ def write_case_file(root: Path, case: dict) -> Path:
         lines.extend(f"- {entry}" for entry in case["items"])
     else:
         lines.append("- None yet.")
-    secure_write_text(path, "\n".join(lines) + "\n")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
 
@@ -308,7 +279,7 @@ def load_all_cases(root: Path) -> list[dict]:
 
 
 def find_case(root: Path, case_id: str) -> dict:
-    if not CASE_ID_RE.fullmatch(case_id):
+    if not re.match(r"^SC-\d{4}-\d{3}$", case_id):
         fail(f"Invalid case ID: {case_id!r} (expected SC-YYYY-NNN)")
     path = root / "cases" / case_id / "case.md"
     if not path.is_file():
@@ -364,11 +335,9 @@ def create_data_root(root: Path, account: str, account_address: str) -> None:
         fail(f"{config} already exists; refusing to overwrite an initialized data root.")
     if root.exists() and not root.is_dir():
         fail(f"Root path is not a directory: {root}")
-    secure_directory(root)
     for folder in ("intake", "cases", "board", "briefings", "tmp"):
-        secure_directory(root / folder)
-    secure_write_text(
-        config,
+        (root / folder).mkdir(parents=True, exist_ok=True)
+    config.write_text(
         "\n".join(
             [
                 "# Senate Chair Data Root",
@@ -388,8 +357,8 @@ def create_data_root(root: Path, account: str, account_address: str) -> None:
                 "Add one owner or unit per line, formatted as `- Name`.",
                 "",
             ]
-        )
-        + "\n",
+        ),
+        encoding="utf-8",
     )
 
 
@@ -577,6 +546,7 @@ def cmd_process(args: argparse.Namespace) -> None:
     case["items"].append(f"{item_id}: {headline_from_summary(summary)}")
 
     item_path = root / "cases" / case["id"] / "items" / f"{item_id}.md"
+    item_path.parent.mkdir(parents=True, exist_ok=True)
     item_lines = [
         f"# Item {item_id}",
         f"- Source: {source_display}",
@@ -595,7 +565,7 @@ def cmd_process(args: argparse.Namespace) -> None:
         item_lines.extend(f"- {entry['date']}: {entry['source']}" for entry in deadlines)
     else:
         item_lines.append("None.")
-    secure_write_text(item_path, "\n".join(item_lines) + "\n")
+    item_path.write_text("\n".join(item_lines) + "\n", encoding="utf-8")
     write_case_file(root, case)
     board_path = generate_board(root)
     emit(
@@ -733,50 +703,30 @@ def render_card(case: dict, today: date) -> str:
     )
 
 
-def render_static_column(status: str, cases: list[dict], today: date) -> str:
-    cards = "".join(render_card(case, today) for case in cases)
-    empty = '<p class="empty-column">Nothing here.</p>' if not cases else ""
-    return (
-        f'<section class="col-xs-12 col-sm-6 col-md-3 board-column" data-status="{html.escape(status)}">'
-        f'<h2>{html.escape(status)} <span class="badge count">{len(cases)}</span></h2>'
-        f'<div class="column-cards">{cards}{empty}</div>'
-        "</section>"
-    )
-
-
-def render_static_board(cases: list[dict], today: date) -> str:
+def generate_board(root: Path) -> Path:
+    cases = load_all_cases(root)
+    today = date.today()
     columns = {status: [] for status in STATUSES}
     for case in cases:
         status = case.get("Status", "")
         if status not in columns:
             fail(f"Case {case['id']} has an invalid status: {status!r}")
         columns[status].append(case)
-    return "".join(
-        render_static_column(status, column_cases, today)
-        for status, column_cases in columns.items()
-    )
 
-
-def generate_board(root: Path) -> Path:
-    cases = load_all_cases(root)
-    today = date.today()
     board_dir = root / "board"
-    secure_directory(board_dir)
+    board_dir.mkdir(parents=True, exist_ok=True)
     assets_dir = Path(__file__).resolve().parent.parent / "assets"
-    for filename in ("dashboard.css", "dashboard-app.js"):
+    asset_destinations = {
+        "dashboard-template.html": "index.html",
+        "dashboard.css": "dashboard.css",
+        "dashboard-app.js": "app.js",
+    }
+    for filename, destination_name in asset_destinations.items():
         source = assets_dir / filename
         if not source.is_file():
             fail(f"Dashboard asset missing: {source}")
-        secure_write_text(board_dir / filename, source.read_text(encoding="utf-8"))
-    template_path = assets_dir / "dashboard-template.html"
-    if not template_path.is_file():
-        fail(f"Dashboard asset missing: {template_path}")
-    template = template_path.read_text(encoding="utf-8")
-    if "<!--BOARD_CARDS-->" not in template:
-        fail("Dashboard template is missing the board placeholder.")
-    board_html = template.replace("<!--BOARD_CARDS-->", render_static_board(cases, today))
+        (board_dir / destination_name).write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
     board_path = board_dir / "index.html"
-    secure_write_text(board_path, board_html)
     return board_path
 
 
@@ -996,7 +946,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     serve_parser = subparsers.add_parser("serve", help="serve the interactive local board")
     serve_parser.add_argument("--root")
-    serve_parser.add_argument("--host", default="127.0.0.1", choices=("127.0.0.1",))
+    serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8765)
     serve_parser.set_defaults(func=cmd_serve)
 

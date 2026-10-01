@@ -57,5 +57,3 @@ The script owns these formats. Read them to understand the store; do not edit ca
 - `brief --root <root> [--date YYYY-MM-DD]`: print the briefing JSON skeleton and update the last-briefing marker.
 - `list --root <root> [--status <s>] [--topic <t>]`: list cases.
 - `mark --root <root> --mail-run YYYY-MM-DD`: record the last processed mail date.
-- `serve --root <root> --host 127.0.0.1 --port 8765`: serve the interactive board locally; non-loopback hosts are rejected.
-- `status --root <root>`: show the configured root, account label, timestamps, and board path.

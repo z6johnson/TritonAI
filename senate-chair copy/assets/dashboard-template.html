@@ -1,11 +1,12 @@
 <!doctype html>
-<html class="no-js" lang="en-US">
+<html class="no-js" lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
 <title>Senate Chair Board | UC San Diego</title>
-<meta name="description" content="Interactive Senate Chair case board">
+<meta name="DESCRIPTION" content="Interactive Senate Chair case board">
 
 <link href="https://cdn.ucsd.edu/cms/decorator-5/styles/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.ucsd.edu/cms/decorator-5/styles/base.min.css" rel="stylesheet">
@@ -14,7 +15,7 @@
 <body>
 
 <header class="layout-header">
-  <a class="sr-only" href="#main-content">Skip to main content</a>
+  <a class="sr-only skip-to-main" href="#main-content">Skip to main content</a>
   <div id="uc-emergency"></div>
   <section aria-label="Site Name" class="layout-title">
     <div class="layout-container container">
@@ -30,16 +31,11 @@
     <div class="navbar-header">
       <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#board-navbar" aria-expanded="false" aria-controls="board-navbar">
         <span class="sr-only">Toggle navigation</span>
-        <div class="col-sm-1 mobile-nav-bars">
-          <span class="icon-bar"></span>
-          <span class="icon-bar"></span>
-          <span class="icon-bar"></span>
-        </div>
-        <div class="col-sm-1 mobile-nav-icon">MENU</div>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
       </button>
-      <div class="col-sm-4 pull-right visible-xs-block">
-        <img src="https://cdn.ucsd.edu/developer/decorator/5.0.2/img/ucsd-footer-logo-white.png" alt="UC San Diego" class="img-responsive header-logo">
-      </div>
+      <a class="navbar-brand visible-xs-block" href="#main-content">Senate Chair</a>
     </div>
     <div id="board-navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
@@ -53,10 +49,10 @@
   <div class="container">
     <div class="row">
       <div class="col-xs-12">
-        <h1 class="page-header">Senate Chair Board</h1>
-        <p class="lead">Drag a case between stages or edit its details inline.</p>
+        <h1>Senate Chair Board</h1>
+        <p class="subhead">Drag a case between stages or edit its details inline.</p>
         <div id="board-message" class="board-message" role="status" aria-live="polite"></div>
-        <div id="board-root" class="row board-columns" aria-live="polite"><!--BOARD_CARDS--></div>
+        <div id="board-root" class="row board-columns" aria-live="polite"></div>
         <noscript>
           <p class="alert alert-warning">Enable JavaScript to use the interactive board.</p>
         </noscript>

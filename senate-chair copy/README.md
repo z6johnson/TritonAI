@@ -15,7 +15,7 @@ The skill asks for the Chair's email link (`Gmail`, `Outlook`, or intake-folder-
 ## Local actions
 
 - **Process:** `Use $senate-chair to process my new materials.`
-- **Board:** `Use $senate-chair to view my board.` The generated HTML contains a read-only static board; the local server enables inline edits and drag-and-drop.
+- **Board:** `Use $senate-chair to view my board.`
 - **Briefing:** `Use $senate-chair to run my daily briefing.`
 - **Status:** `Use $senate-chair to show my setup status.`
 
@@ -36,7 +36,7 @@ The root is remembered in `~/.senate-chair/root`, so later `board`, `brief`, `li
 Package this folder:
 
 ```bash
-zip -r senate-chair.zip senate-chair/ -x "*.DS_Store" "*/__pycache__/*" "*.pyc"
+zip -r senate-chair.zip senate-chair/
 ```
 
 Install it by unzipping it into `$CODEX_HOME/skills/senate-chair/`, or share the repository folder path through the Harness skill installer.
