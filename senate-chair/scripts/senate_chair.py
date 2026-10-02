@@ -729,6 +729,30 @@ def cmd_link_drive(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_link_account(args: argparse.Namespace) -> None:
+    root = resolve_root(args.root)
+    require_root(root)
+    account = args.account
+    legacy_account = account == "outlook"
+    if legacy_account:
+        account = "outlook-chair"
+    if account not in ACCOUNT_TYPES:
+        fail(
+            "Provide --account outlook-chair, outlook-personal, gmail, or none."
+        )
+    account_address = (args.account_address or "").strip() if account != "none" else ""
+    update_config(root, "Linked account", ACCOUNT_LABELS[account])
+    update_config(root, "Account address", account_address)
+    emit(
+        {
+            "root": str(root),
+            "linked_account": ACCOUNT_LABELS[account],
+            "account_address": account_address,
+            "legacy_outlook_alias": legacy_account,
+        }
+    )
+
+
 def cmd_triage(args: argparse.Namespace) -> None:
     root = resolve_root(args.root)
     require_root(root)
@@ -1256,6 +1280,15 @@ def build_parser() -> argparse.ArgumentParser:
     link_drive_parser.add_argument("--name", required=True)
     link_drive_parser.add_argument("--drive-id", dest="drive_id")
     link_drive_parser.set_defaults(func=cmd_link_drive)
+
+    link_account_parser = subparsers.add_parser(
+        "link-account",
+        help="link or update the email account scope on an initialized root",
+    )
+    link_account_parser.add_argument("--root")
+    link_account_parser.add_argument("--account", required=True, choices=ACCOUNT_CHOICES)
+    link_account_parser.add_argument("--account-address", dest="account_address")
+    link_account_parser.set_defaults(func=cmd_link_account)
 
     triage_parser = subparsers.add_parser("triage", help="apply Chair-confirmed case decisions")
     triage_parser.add_argument("--root")

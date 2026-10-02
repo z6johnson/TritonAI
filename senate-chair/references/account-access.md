@@ -37,6 +37,21 @@ Record the scope with `--account outlook-chair` (or `outlook-personal`,
 stores only the label and display address — never credentials or OAuth
 tokens.
 
+## Changing the linked account
+
+If the wrong account was selected during setup, the Chair can say:
+
+> Use $senate-chair to switch my linked email account to the Senate Chair
+> account.
+
+The assistant verifies which Outlook account the Harness integration is
+actually connected to before changing anything. If the Senate Chair account
+is connected, relink with `link-account --account outlook-chair
+--account-address <address>`. If the personal account is still connected,
+guide the Chair to connect the Senate Chair account in Harness account
+settings first; never relabel the root to match an account that is not the
+one actually connected.
+
 ## Mail
 
 - Use only the account scope recorded in `config.md` as `Linked account`.

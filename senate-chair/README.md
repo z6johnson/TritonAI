@@ -41,6 +41,7 @@ name/ID — never credentials or OAuth tokens.
 - **Board:** `Use $senate-chair to view my board.`
 - **Briefing:** `Use $senate-chair to run my daily briefing.`
 - **Link Drive:** `Use $senate-chair to link my shared Google Drive repository.`
+- **Switch account:** `Use $senate-chair to switch my linked email account to the Senate Chair account.`
 - **Status:** `Use $senate-chair to show my setup status.`
 
 The assistant-side command surface is documented in
@@ -50,9 +51,9 @@ The assistant-side command surface is documented in
 
 All functionality is packaged as one command, run through `bin/senate-chair`
 (or `senate-chair` after `install-command`): `doctor`, `setup`, `new-item`,
-`process` (legacy JSON), `link-drive`, `triage`, `board`, `brief`, `list`,
-`mark`, `serve`, `status`, and `install-command`. Item intake uses the
-single-command `new-item` flow — no JSON files or copy/paste.
+`process` (legacy JSON), `link-drive`, `link-account`, `triage`, `board`,
+`brief`, `list`, `mark`, `serve`, `status`, and `install-command`. Item
+intake uses the single-command `new-item` flow — no JSON files or copy/paste.
 
 ## Distribution
 

@@ -112,6 +112,32 @@ Search Drive for the Chair's named folder, confirm the match, then:
 bin/senate-chair link-drive --name "<folder name>" --drive-id "<folder id>"
 ```
 
+## Switch linked account
+
+```text
+Use $senate-chair to switch my linked email account to the Senate Chair account.
+```
+
+Use this whenever the wrong account was selected during setup or the Chair
+wants a different account scope. Also accept close variants such as "change"
+or "update my linked email account."
+
+1. Check which Outlook account the Harness integration is connected to and
+   show the Chair its address.
+2. If it is the Senate Chair account, ask for one confirmation, then:
+
+```bash
+bin/senate-chair link-account --account outlook-chair --account-address "<address>"
+```
+
+3. If it is still the personal university account, guide the Chair to
+   connect the Senate Chair account in Harness account settings first. Do
+   not relabel the root until the Senate Chair account is actually connected
+   and confirmed.
+4. `none` disables mail and calendar; `outlook-personal` and `gmail` are
+   recorded the same way, but personal-university scope is not used for
+   Senate business.
+
 ## Status and health
 
 ```text

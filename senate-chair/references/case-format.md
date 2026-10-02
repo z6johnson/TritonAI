@@ -58,6 +58,7 @@ All commands run through `bin/senate-chair` (or `senate-chair` after
 - `new-item --root <root> ...`: persist one processed item in a single command; see `workflow.md`.
 - `process --root <root> --payload <json>`: legacy JSON-payload alternative to `new-item`.
 - `link-drive --root <root> --name <name> [--drive-id <id>]`: link or update the shared Google Drive repository.
+- `link-account --root <root> --account <outlook-chair|outlook-personal|gmail|none> [--account-address <address>]`: link or update the email account scope after verifying the connected account.
 - `triage --root <root> --case <id> [--status <s>] [--owner <o>] [--next-action <text>] [--pending-unit <unit>] [--clear-review]`: apply Chair-confirmed decisions; regenerate the board.
 - `board --root <root>`: regenerate `board/index.html`.
 - `brief --root <root> [--date YYYY-MM-DD]`: print the briefing JSON skeleton and update the last-briefing marker.
